@@ -39,6 +39,25 @@ Open http://localhost:5173, create an account, and start tracking.
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for the full Oracle Cloud setup (VM, firewall,
 DuckDNS domain, Caddy HTTPS) and one-command deploys with `./deploy.sh`.
 
+#### Netlify (needed for the AI assistant)
+
+The static app deploys anywhere, but the AI assistant uses a **Netlify Function**
+to call Groq without exposing your API key:
+
+1. Connect the repo on [netlify.com](https://netlify.com) — `netlify.toml`
+   already sets the build (`npm run build` → `dist`).
+2. **Site settings → Environment variables** → add `GROQ_API_KEY`
+   (free key from [console.groq.com/keys](https://console.groq.com/keys)).
+   Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`).
+3. Deploy. The chat works at `/.netlify/functions/ai-chat`.
+
+Run it locally with real functions (plain `npm run dev` has no functions —
+the assistant will tell you):
+
+```bash
+GROQ_API_KEY=your-key npx netlify-cli dev
+```
+
 ## Features
 
 - Email/password login, private per-user data (RLS)
@@ -47,6 +66,9 @@ DuckDNS domain, Caddy HTTPS) and one-command deploys with `./deploy.sh`.
 - **Recurring bills** (rent, utilities, internet): fixed monthly amounts with
   Upcoming / Due-passed / Paid status right on the transactions page — marking
   paid records the real expense automatically, with one-tap Undo
+- **AI assistant** (optional, Groq free tier): describe a transaction in plain
+  language — “burger 350”, “salary 45000”, “rickshaw 20 yesterday” — the AI
+  picks the best category and shows a confirm card; one tap saves it
 - Month-by-month navigation, search, and filters (type, category)
 - Dashboard: monthly totals, 6-month trend chart, category donut, budget
   progress, recurring-bills overview

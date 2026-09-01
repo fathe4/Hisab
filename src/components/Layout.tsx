@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import AiChat from './AiChat'
 import ThemeToggle from './ThemeToggle'
 import { HomeIcon, ListIcon, LogoutIcon, PlusIcon, TagsIcon } from './icons'
 
@@ -110,6 +111,9 @@ export default function Layout() {
           <BottomLink to="/categories" label="Categories" icon={TagsIcon} />
         </div>
       </nav>
+
+      {/* AI assistant — floating, available on every page */}
+      <AiChat />
     </div>
   )
 }

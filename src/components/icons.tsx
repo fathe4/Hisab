@@ -179,7 +179,25 @@ export function MoonIcon(props: IconProps) {
 export function CheckIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
-      <path d="M20 6 9 17l-5-5" />
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  )
+}
+
+export function SparklesIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M12 3l1.9 4.6L18.5 9.5l-4.6 1.9L12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3z" />
+      <path d="M19 15l.9 2.1L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.9L19 15z" />
+    </svg>
+  )
+}
+
+export function SendIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M22 2L11 13" />
+      <path d="M22 2l-7 20-4-9-9-4 20-7z" />
     </svg>
   )
 }
