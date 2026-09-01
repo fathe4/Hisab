@@ -9,6 +9,7 @@
 
 import http from 'node:http'
 import aiChatHandler from '../netlify/functions/ai-chat.mts'
+import aiTranscribeHandler from '../netlify/functions/ai-transcribe.mts'
 
 const PORT = 8788
 
@@ -96,14 +97,22 @@ const server = http.createServer(async (req, res) => {
       return
     }
 
-    if (req.url?.endsWith('/ai-chat')) {
-      // ---- real function handler ----
+    if (req.url?.endsWith('/audio/transcriptions')) {
+      // ---- mock Groq Whisper ----
+      res.writeHead(200, { 'Content-Type': 'application/json' })
+      res.end(JSON.stringify({ text: 'rickshaw 20 yesterday' }))
+      return
+    }
+
+    if (req.url?.endsWith('/ai-chat') || req.url?.endsWith('/ai-transcribe')) {
+      // ---- real function handlers ----
+      const handler = req.url.endsWith('/ai-transcribe') ? aiTranscribeHandler : aiChatHandler
       const request = new Request('http://localhost' + req.url, {
         method: req.method,
         headers: req.headers,
         body: ['GET', 'HEAD'].includes(req.method) ? undefined : rawBody,
       })
-      const response = await aiChatHandler(request)
+      const response = await handler(request)
       const text = await response.text()
       res.writeHead(response.status, Object.fromEntries(response.headers))
       res.end(text)

@@ -81,7 +81,7 @@ export default async (req: Request): Promise<Response> => {
   const system = [
     'You are the assistant of a personal finance app. Currency is Bangladeshi Taka (৳).',
     `Today is ${today}.`,
-    'The user describes a transaction in casual language (English or Banglish).',
+    'The user describes a transaction in casual language — English, Banglish, or Bengali script.',
     'Extract ONE transaction and reply ONLY with a JSON object:',
     '{"reply": string, "transaction": null | {"type": "income"|"expense", "note": string, "amount": number, "date": "YYYY-MM-DD", "category_id": string|null, "suggested_category": string|null}}',
     'Rules:',

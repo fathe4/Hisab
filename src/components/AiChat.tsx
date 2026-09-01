@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon, SparklesIcon, SendIcon, BoltIcon } from './icons'
+import { XIcon, SparklesIcon, SendIcon, BoltIcon, MicIcon } from './icons'
 import Spinner from './Spinner'
 import { useCategories } from '../hooks/useCategories'
 import { useSaveTransaction } from '../hooks/useTransactions'
-import { askAi, type AiTransaction } from '../lib/ai'
+import { askAi, transcribeAudio, type AiTransaction } from '../lib/ai'
 import { formatDay } from '../lib/dates'
 import { formatTaka } from '../lib/format'
 
@@ -12,7 +12,8 @@ import { formatTaka } from '../lib/format'
  * ("burger 350", "salary 45000"), the AI parses it into a confirm card
  * (name, amount, best category, date) and one tap saves the real
  * transaction via the normal client → Supabase path. With ⚡ Auto-save
- * on, the confirmation step is skipped entirely.
+ * on, the confirmation step is skipped entirely. 🎙️ Speech-to-text
+ * (Groq Whisper) drops spoken messages into the input.
  */
 
 type CardStatus = 'pending' | 'saving' | 'saved' | 'cancelled' | 'error'
@@ -32,6 +33,7 @@ interface ChatMessage {
 
 const EXAMPLES = ['Burger 350', 'Salary 45000', 'Rickshaw 20 yesterday']
 const AUTOSAVE_KEY = 'hisab-ai-autosave'
+const MAX_RECORD_SECONDS = 60
 
 export default function AiChat() {
   const [open, setOpen] = useState(false)
@@ -39,6 +41,14 @@ export default function AiChat() {
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
   const [autoSave, setAutoSave] = useState(() => localStorage.getItem(AUTOSAVE_KEY) === '1')
+
+  // Speech-to-text state
+  const [recording, setRecording] = useState(false)
+  const [recordSecs, setRecordSecs] = useState(0)
+  const [transcribing, setTranscribing] = useState(false)
+  const recorderRef = useRef<MediaRecorder | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const timerRef = useRef<number | null>(null)
 
   const { data: categories = [] } = useCategories()
   const save = useSaveTransaction()
@@ -71,6 +81,76 @@ export default function AiChat() {
     if (tx.category_id) return tx.category_id
     const other = categories.find((c) => c.type === tx.type && /^other/i.test(c.name))
     return other?.id ?? categories.find((c) => c.type === tx.type)?.id ?? null
+  }
+
+  // ---------- Speech to text ----------
+
+  const stopRecording = () => {
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop()
+  }
+
+  // Hard stop at the length cap
+  useEffect(() => {
+    if (recording && recordSecs >= MAX_RECORD_SECONDS) stopRecording()
+  }, [recordSecs, recording])
+
+  const startRecording = async () => {
+    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+      setMessages((m) => [...m, { role: 'bot', text: 'Speech input is not supported in this browser.' }])
+      return
+    }
+    let stream: MediaStream
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    } catch {
+      setMessages((m) => [
+        ...m,
+        { role: 'bot', text: 'Microphone access was blocked — allow it in the browser address bar, then try again.' },
+      ])
+      return
+    }
+
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4'].find((m) =>
+      MediaRecorder.isTypeSupported(m),
+    )
+    const recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined)
+    chunksRef.current = []
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data)
+    }
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop())
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
+      setRecording(false)
+
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType || 'audio/webm' })
+      if (blob.size < 1200) {
+        setMessages((m) => [...m, { role: 'bot', text: 'That was too short — hold the mic a bit longer.' }])
+        return
+      }
+      setTranscribing(true)
+      try {
+        const text = await transcribeAudio(blob)
+        setInput((prev) => (prev.trim() ? `${prev.trim()} ${text}` : text))
+      } catch (err) {
+        setMessages((m) => [
+          ...m,
+          { role: 'bot', text: err instanceof Error ? err.message : 'Transcription failed.' },
+        ])
+      } finally {
+        setTranscribing(false)
+      }
+    }
+
+    recorder.start()
+    recorderRef.current = recorder
+    setRecordSecs(0)
+    setRecording(true)
+    timerRef.current = window.setInterval(() => setRecordSecs((s) => s + 1), 1000)
   }
 
   const send = async (raw?: string) => {
@@ -178,7 +258,8 @@ export default function AiChat() {
                 </span>
                 <p className="text-sm font-semibold">Tell me what you spent</p>
                 <p className="mx-auto max-w-[16rem] text-xs text-gray-400 dark:text-gray-500">
-                  Say something like “burger 350” or “salary 45000” — I'll pick the category and you just confirm.
+                  Say something like “burger 350” or “salary 45000” — I'll pick the category and you just
+                  confirm. Or tap 🎙️ and speak.
                 </p>
                 <div className="flex flex-wrap justify-center gap-1.5 pt-1">
                   {EXAMPLES.map((ex) => (
@@ -230,42 +311,74 @@ export default function AiChat() {
               e.preventDefault()
               send()
             }}
-            className="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-gray-800"
+            className="border-t border-gray-100 dark:border-gray-800"
           >
-            <button
-              type="button"
-              onClick={toggleAutoSave}
-              aria-pressed={autoSave}
-              title={
-                autoSave
-                  ? 'Auto-save ON — transactions are saved without confirmation'
-                  : 'Auto-save OFF — every transaction asks before saving'
-              }
-              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
-                autoSave
-                  ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30'
-                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300'
-              }`}
-            >
-              <BoltIcon width={18} height={18} />
-            </button>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="e.g. burger 350"
-              maxLength={500}
-              autoFocus
-              className="field flex-1"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || thinking}
-              aria-label="Send"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40"
-            >
-              <SendIcon width={18} height={18} />
-            </button>
+            {recording && (
+              <div className="flex items-center gap-2 px-3 pt-2">
+                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-rose-500" />
+                <p className="text-xs font-medium text-rose-500">
+                  Recording… {Math.floor(recordSecs / 60)}:{String(recordSecs % 60).padStart(2, '0')} — tap
+                  ■ to transcribe
+                </p>
+              </div>
+            )}
+            <div className="flex items-center gap-2 p-3">
+              <button
+                type="button"
+                onClick={toggleAutoSave}
+                aria-pressed={autoSave}
+                title={
+                  autoSave
+                    ? 'Auto-save ON — transactions are saved without confirmation'
+                    : 'Auto-save OFF — every transaction asks before saving'
+                }
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+                  autoSave
+                    ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30'
+                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300'
+                }`}
+              >
+                <BoltIcon width={18} height={18} />
+              </button>
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder={recording ? 'Listening…' : 'e.g. burger 350'}
+                maxLength={500}
+                autoFocus
+                disabled={recording}
+                className="field flex-1 disabled:opacity-60"
+              />
+              <button
+                type="button"
+                onClick={recording ? stopRecording : startRecording}
+                disabled={thinking || transcribing}
+                aria-label={recording ? 'Stop recording' : 'Record voice message'}
+                title={recording ? 'Stop & transcribe' : 'Speak your transaction'}
+                className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition disabled:opacity-40 ${
+                  recording
+                    ? 'bg-rose-600 text-white hover:bg-rose-500'
+                    : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300'
+                }`}
+              >
+                {transcribing ? (
+                  <Spinner className="h-4.5 w-4.5 text-indigo-500" />
+                ) : recording ? (
+                  <span className="h-3 w-3 rounded-[2px] bg-white" />
+                ) : (
+                  <MicIcon width={18} height={18} />
+                )}
+              </button>
+              <button
+                type="submit"
+                disabled={!input.trim() || thinking}
+                aria-label="Send"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-600 text-white transition hover:bg-indigo-500 disabled:opacity-40"
+              >
+                <SendIcon width={18} height={18} />
+              </button>
+            </div>
           </form>
         </div>
       )}

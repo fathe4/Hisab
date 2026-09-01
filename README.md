@@ -69,7 +69,9 @@ GROQ_API_KEY=your-key npx netlify-cli dev
   paid records the real expense automatically, with one-tap Undo
 - **AI assistant** (optional, Groq free tier): describe a transaction in plain
   language — “burger 350”, “salary 45000”, “rickshaw 20 yesterday” — the AI
-  picks the best category and shows a confirm card; one tap saves it
+  picks the best category and shows a confirm card; one tap saves it. ⚡
+  Auto-save skips the confirmation, and 🎙️ speech-to-text (Whisper) lets you
+  just say it — English, Banglish, or Bengali
 - Month-by-month navigation, search, and filters (type, category)
 - Dashboard: monthly totals, 6-month trend chart, category donut, budget
   progress, recurring-bills overview
