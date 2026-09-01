@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { XIcon, SparklesIcon, SendIcon } from './icons'
+import { XIcon, SparklesIcon, SendIcon, BoltIcon } from './icons'
 import Spinner from './Spinner'
 import { useCategories } from '../hooks/useCategories'
 import { useSaveTransaction } from '../hooks/useTransactions'
@@ -11,7 +11,8 @@ import { formatTaka } from '../lib/format'
  * Floating AI assistant: describe a transaction in plain language
  * ("burger 350", "salary 45000"), the AI parses it into a confirm card
  * (name, amount, best category, date) and one tap saves the real
- * transaction via the normal client → Supabase path.
+ * transaction via the normal client → Supabase path. With ⚡ Auto-save
+ * on, the confirmation step is skipped entirely.
  */
 
 type CardStatus = 'pending' | 'saving' | 'saved' | 'cancelled' | 'error'
@@ -30,15 +31,25 @@ interface ChatMessage {
 }
 
 const EXAMPLES = ['Burger 350', 'Salary 45000', 'Rickshaw 20 yesterday']
+const AUTOSAVE_KEY = 'hisab-ai-autosave'
 
 export default function AiChat() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [thinking, setThinking] = useState(false)
+  const [autoSave, setAutoSave] = useState(() => localStorage.getItem(AUTOSAVE_KEY) === '1')
 
   const { data: categories = [] } = useCategories()
+  const save = useSaveTransaction()
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  const toggleAutoSave = () => {
+    setAutoSave((on) => {
+      localStorage.setItem(AUTOSAVE_KEY, on ? '0' : '1')
+      return !on
+    })
+  }
 
   useEffect(() => {
     // keep the latest message visible
@@ -55,6 +66,13 @@ export default function AiChat() {
     return () => document.removeEventListener('keydown', onKey)
   }, [open])
 
+  /** Auto-save category: the AI's pick, else the "Other <type>" fallback. */
+  const resolveAutoCategory = (tx: AiTransaction): string | null => {
+    if (tx.category_id) return tx.category_id
+    const other = categories.find((c) => c.type === tx.type && /^other/i.test(c.name))
+    return other?.id ?? categories.find((c) => c.type === tx.type)?.id ?? null
+  }
+
   const send = async (raw?: string) => {
     const text = (raw ?? input).trim()
     if (!text || thinking) return
@@ -63,17 +81,44 @@ export default function AiChat() {
     setThinking(true)
     try {
       const res = await askAi(text, categories)
+      const tx = res.transaction
+
+      // ⚡ Auto-save: skip the confirm card and write straight away
+      if (tx && autoSave) {
+        const categoryId = resolveAutoCategory(tx)
+        if (categoryId) {
+          let card: ConfirmCard
+          try {
+            await save.mutateAsync({
+              category_id: categoryId,
+              type: tx.type,
+              amount: tx.amount,
+              note: tx.note,
+              transaction_date: tx.date,
+            })
+            card = { tx, categoryId, status: 'saved' }
+          } catch (err) {
+            card = {
+              tx,
+              categoryId,
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Could not save — confirm manually.',
+            }
+          }
+          setMessages((m) => [...m, { role: 'bot', text: res.reply, card }])
+          return
+        }
+        // no category of this type exists at all → fall through to the card
+      }
+
       setMessages((m) => [
         ...m,
         {
           role: 'bot',
-          text: res.reply || (res.transaction ? 'Here is what I understood:' : "I didn't catch that."),
-          card:
-            res.transaction && res.transaction.category_id
-              ? { tx: res.transaction, categoryId: res.transaction.category_id, status: 'pending' }
-              : res.transaction
-                ? { tx: res.transaction, categoryId: '', status: 'pending' }
-                : undefined,
+          text: res.reply || (tx ? 'Here is what I understood:' : "I didn't catch that."),
+          card: tx
+            ? { tx, categoryId: tx.category_id ?? '', status: 'pending' }
+            : undefined,
         },
       ])
     } catch (err) {
@@ -94,12 +139,13 @@ export default function AiChat() {
 
   return (
     <>
-      {/* Floating button */}
+      {/* Floating button — sits high enough on desktop to clear the
+          Netlify badge that sites show in the bottom-right corner */}
       {!open && (
         <button
           onClick={() => setOpen(true)}
           aria-label="AI assistant"
-          className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 active:scale-95 lg:bottom-6 lg:right-6"
+          className="fixed bottom-24 right-4 z-40 flex h-13 w-13 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition hover:bg-indigo-500 active:scale-95 lg:bottom-20 lg:right-6"
         >
           <SparklesIcon width={22} height={22} />
         </button>
@@ -107,7 +153,7 @@ export default function AiChat() {
 
       {/* Chat panel */}
       {open && (
-        <div className="fixed inset-x-3 bottom-24 z-40 flex h-[min(30rem,68vh)] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 lg:inset-x-auto lg:right-6 lg:bottom-6 lg:w-[24rem]">
+        <div className="fixed inset-x-3 bottom-24 z-40 flex h-[min(30rem,68vh)] flex-col overflow-hidden rounded-3xl border border-gray-100 bg-white shadow-2xl dark:border-gray-800 dark:bg-gray-900 lg:inset-x-auto lg:right-6 lg:bottom-20 lg:w-[24rem]">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3 dark:border-gray-800">
             <p className="flex items-center gap-2 text-sm font-bold">
@@ -186,6 +232,23 @@ export default function AiChat() {
             }}
             className="flex items-center gap-2 border-t border-gray-100 p-3 dark:border-gray-800"
           >
+            <button
+              type="button"
+              onClick={toggleAutoSave}
+              aria-pressed={autoSave}
+              title={
+                autoSave
+                  ? 'Auto-save ON — transactions are saved without confirmation'
+                  : 'Auto-save OFF — every transaction asks before saving'
+              }
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition ${
+                autoSave
+                  ? 'bg-amber-100 text-amber-600 hover:bg-amber-200 dark:bg-amber-500/20 dark:text-amber-400 dark:hover:bg-amber-500/30'
+                  : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300'
+              }`}
+            >
+              <BoltIcon width={18} height={18} />
+            </button>
             <input
               type="text"
               value={input}

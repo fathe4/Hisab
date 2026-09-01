@@ -201,3 +201,11 @@ export function SendIcon(props: IconProps) {
     </svg>
   )
 }
+
+export function BoltIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M13 2L4.5 13h6L10 22l8.5-11h-6L13 2z" />
+    </svg>
+  )
+}
