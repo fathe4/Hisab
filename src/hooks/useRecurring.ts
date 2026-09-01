@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
@@ -55,6 +56,30 @@ export function useRecurringPayments(month: string) {
       return data as RecurringPayment[]
     },
   })
+}
+
+/**
+ * Sum of still-unpaid active bills (overdue + upcoming) for one month and
+ * whether the user tracks any active bill at all. Used by the
+ * "Expenses + bills due" summary cards.
+ */
+export function usePendingBillsTotal(month: string) {
+  const { data: items = [] } = useRecurringItems()
+  const { data: payments = [] } = useRecurringPayments(month)
+  return useMemo(() => {
+    const byItem = new Map(payments.map((p) => [p.recurring_item_id, p]))
+    let pendingTotal = 0
+    let hasBills = false
+    for (const item of items) {
+      if (!item.active) continue
+      hasBills = true
+      const view = buildBillView(item, byItem.get(item.id), month)
+      if (view.status === 'overdue' || view.status === 'upcoming') {
+        pendingTotal += Number(item.amount)
+      }
+    }
+    return { pendingTotal, hasBills }
+  }, [items, payments, month])
 }
 
 export interface RecurringItemInput {

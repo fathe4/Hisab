@@ -131,6 +131,16 @@ export function WalletIcon(props: IconProps) {
   )
 }
 
+export function ReceiptIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M6 3h12v18l-2-1.5L14 21l-2-1.5L10 21l-2-1.5L6 21V3z" />
+      <path d="M9.5 8h5" />
+      <path d="M9.5 12h5" />
+    </svg>
+  )
+}
+
 export function TrendingDownIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

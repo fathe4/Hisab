@@ -15,7 +15,7 @@ import {
 import MonthSwitcher from '../components/MonthSwitcher'
 import EmptyState from '../components/EmptyState'
 import Spinner from '../components/Spinner'
-import { TrendingDownIcon, TrendingUpIcon, WalletIcon } from '../components/icons'
+import { TrendingDownIcon, TrendingUpIcon, WalletIcon, ReceiptIcon } from '../components/icons'
 import { useTheme } from '../hooks/useTheme'
 import { useBudgets } from '../hooks/useBudgets'
 import { buildBillView, useRecurringItems, useRecurringPayments } from '../hooks/useRecurring'
@@ -153,7 +153,11 @@ export default function DashboardPage() {
       ) : (
         <>
           {/* Stat cards */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div
+            className={`grid grid-cols-1 gap-3 sm:grid-cols-2 ${
+              billViews.length > 0 ? 'xl:grid-cols-4' : 'xl:grid-cols-3'
+            }`}
+          >
             <StatCard
               label="Income"
               value={formatTaka(totals.income)}
@@ -172,6 +176,14 @@ export default function DashboardPage() {
               icon={<WalletIcon />}
               tone={totals.net >= 0 ? 'indigo' : 'rose'}
             />
+            {billViews.length > 0 && (
+              <StatCard
+                label="Expenses + bills due"
+                value={formatTaka(totals.expense + billsRemaining)}
+                icon={<ReceiptIcon />}
+                tone="amber"
+              />
+            )}
           </div>
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
@@ -436,12 +448,13 @@ function StatCard({
   label: string
   value: string
   icon: React.ReactNode
-  tone: 'emerald' | 'rose' | 'indigo'
+  tone: 'emerald' | 'rose' | 'indigo' | 'amber'
 }) {
   const tones = {
     emerald: 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400',
     rose: 'bg-rose-50 text-rose-600 dark:bg-rose-500/10 dark:text-rose-400',
     indigo: 'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400',
+    amber: 'bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400',
   }
   return (
     <div className="card flex items-center gap-4 p-5">

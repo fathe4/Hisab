@@ -7,6 +7,7 @@ import EmptyState from '../components/EmptyState'
 import Spinner from '../components/Spinner'
 import { PlusIcon, SearchIcon } from '../components/icons'
 import { useCategories } from '../hooks/useCategories'
+import { usePendingBillsTotal } from '../hooks/useRecurring'
 import { useTransactions } from '../hooks/useTransactions'
 import { currentMonthKey, formatDay, monthRange } from '../lib/dates'
 import { formatTaka } from '../lib/format'
@@ -30,6 +31,7 @@ export default function TransactionsPage() {
   const { data: categories = [] } = useCategories()
   const { start, end } = monthRange(month)
   const { data: transactions = [], isPending, isError } = useTransactions(start, end)
+  const { pendingTotal, hasBills } = usePendingBillsTotal(month)
 
   const monthTotals = useMemo(() => {
     let income = 0
@@ -79,7 +81,7 @@ export default function TransactionsPage() {
       </div>
 
       {/* Month summary strip */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className={`grid grid-cols-2 gap-3 ${hasBills ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
         <SummaryTile label="Income" value={monthTotals.income} className="text-emerald-600 dark:text-emerald-400" />
         <SummaryTile label="Expenses" value={monthTotals.expense} className="text-rose-600 dark:text-rose-400" />
         <SummaryTile
@@ -88,6 +90,13 @@ export default function TransactionsPage() {
           className={monthTotals.net >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-600 dark:text-rose-400'}
           signed
         />
+        {hasBills && (
+          <SummaryTile
+            label="Expenses + bills"
+            value={monthTotals.expense + pendingTotal}
+            className="text-amber-600 dark:text-amber-400"
+          />
+        )}
       </div>
 
       {/* Fixed monthly bills with pending/paid status */}
