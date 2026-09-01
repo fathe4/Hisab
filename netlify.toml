@@ -1,0 +1,9 @@
+# Netlify configuration — enables Git-connected deploys out of the box.
+# For manual `netlify deploy` / drag-and-drop, nothing here is required.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

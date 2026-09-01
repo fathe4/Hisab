@@ -1,0 +1,26 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor/OS
+.vscode
+.idea
+.DS_Store
+
+# Agent session data
+.zcode
+
+# Supabase CLI local artifacts (contain local stack secrets — never commit)
+supabase/.temp/
+supabase/.branches/

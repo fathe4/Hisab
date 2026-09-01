@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+/* Class-based dark mode (toggled on <html> by ThemeProvider) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased dark:bg-gray-950 dark:text-gray-100;
+  }
+
+  /* Native controls (date picker, select popup, scrollbar) follow the theme */
+  .dark {
+    color-scheme: dark;
+  }
+}
+
+@layer components {
+  /* Card surfaces used across pages */
+  .card {
+    @apply rounded-2xl border border-gray-100 bg-white dark:border-gray-800 dark:bg-gray-900;
+  }
+
+  /* Shared form field styling */
+  .field {
+    @apply rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder:text-gray-500 dark:focus:border-indigo-500 dark:focus:ring-indigo-950;
+  }
+
+  /* Segmented control track (type tabs etc.) */
+  .segment {
+    @apply grid grid-cols-2 gap-1 rounded-xl bg-gray-100 p-1 dark:bg-gray-800;
+  }
+}
+
+/* Hide number input spinners for a cleaner amount field */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
