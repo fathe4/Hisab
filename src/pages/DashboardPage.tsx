@@ -18,8 +18,9 @@ import Spinner from '../components/Spinner'
 import { TrendingDownIcon, TrendingUpIcon, WalletIcon } from '../components/icons'
 import { useTheme } from '../hooks/useTheme'
 import { useBudgets } from '../hooks/useBudgets'
+import { buildBillView, useRecurringItems, useRecurringPayments } from '../hooks/useRecurring'
 import { useTransactions } from '../hooks/useTransactions'
-import { currentMonthKey, formatDay, lastNMonthKeys, monthsBackRange, shortMonth } from '../lib/dates'
+import { currentMonthKey, formatDay, formatMonth, lastNMonthKeys, monthsBackRange, shortMonth } from '../lib/dates'
 import { formatTaka } from '../lib/format'
 import type { Transaction } from '../types'
 
@@ -32,6 +33,8 @@ export default function DashboardPage() {
   const { start, end } = useMemo(() => monthsBackRange(month, CHART_MONTHS), [month])
   const { data: transactions = [], isPending } = useTransactions(start, end)
   const { data: budgets = [] } = useBudgets()
+  const { data: recurringItems = [] } = useRecurringItems()
+  const { data: recurringPayments = [] } = useRecurringPayments(month)
 
   // Chart colors adapt to the theme
   const gridStroke = isDark ? '#374151' : '#f1f5f9'
@@ -118,6 +121,18 @@ export default function DashboardPage() {
     () => [...currentTx].slice(0, 5),
     [currentTx],
   )
+
+  const billViews = useMemo(() => {
+    const byItem = new Map(recurringPayments.map((p) => [p.recurring_item_id, p]))
+    return recurringItems
+      .filter((i) => i.active)
+      .map((i) => buildBillView(i, byItem.get(i.id), month))
+      .sort((a, b) => a.sortRank - b.sortRank || a.item.due_day - b.item.due_day)
+  }, [recurringItems, recurringPayments, month])
+
+  const billsPaid = billViews.filter((v) => v.status === 'paid')
+  const billsPending = billViews.filter((v) => v.status === 'overdue' || v.status === 'upcoming')
+  const billsRemaining = billsPending.reduce((s, v) => s + Number(v.item.amount), 0)
 
   return (
     <div className="space-y-5">
@@ -242,6 +257,69 @@ export default function DashboardPage() {
               )}
             </section>
           </div>
+
+          {/* Recurring bills overview */}
+          {billViews.length > 0 && (
+            <section className="card p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                  Upcoming payments · {formatMonth(month)}
+                </h2>
+                <Link
+                  to="/transactions"
+                  className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                >
+                  Mark paid →
+                </Link>
+              </div>
+              <div className="flex h-2.5 gap-1 overflow-hidden">
+                {billViews.map((v) => (
+                  <div
+                    key={v.item.id}
+                    className="flex-1 rounded-full transition-colors"
+                    style={{
+                      backgroundColor:
+                        v.status === 'paid'
+                          ? '#10b981'
+                          : v.status === 'overdue'
+                            ? '#f43f5e'
+                            : '#fcd34d',
+                    }}
+                  />
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap items-baseline justify-between gap-2">
+                <p className="text-sm">
+                  <span className="font-bold">
+                    {billsPaid.length} of {billViews.length}
+                  </span>
+                  <span className="text-gray-400 dark:text-gray-500"> bills paid</span>
+                  {billsPending.length > 0 && (
+                    <span className="text-gray-400 dark:text-gray-500">
+                      {' '}
+                      · {formatTaka(billsRemaining)} remaining
+                    </span>
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  {billsPending.slice(0, 3).map((v) => (
+                    <span key={v.item.id} className="flex items-center gap-1.5 text-xs">
+                      <span>{v.item.category?.icon ?? '🧾'}</span>
+                      <span
+                        className={
+                          v.status === 'overdue'
+                            ? 'font-semibold text-rose-600 dark:text-rose-400'
+                            : 'text-gray-500 dark:text-gray-400'
+                        }
+                      >
+                        {v.item.name} · {v.statusLabel}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </section>
+          )}
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
             {/* Budgets */}

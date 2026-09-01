@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import MonthSwitcher from '../components/MonthSwitcher'
 import TransactionModal from '../components/TransactionModal'
+import UpcomingPayments from '../components/UpcomingPayments'
 import EmptyState from '../components/EmptyState'
 import Spinner from '../components/Spinner'
 import { PlusIcon, SearchIcon } from '../components/icons'
@@ -88,6 +89,9 @@ export default function TransactionsPage() {
           signed
         />
       </div>
+
+      {/* Fixed monthly bills with pending/paid status */}
+      <UpcomingPayments month={month} />
 
       {/* Search + filters */}
       <div className="flex flex-wrap items-center gap-2">

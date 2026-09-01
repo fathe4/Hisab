@@ -44,8 +44,13 @@ DuckDNS domain, Caddy HTTPS) and one-command deploys with `./deploy.sh`.
 - Email/password login, private per-user data (RLS)
 - Income & expense categories with emoji + color, seeded with sensible defaults
 - Add/edit/delete transactions with notes and backdated entries
+- **Recurring bills** (rent, utilities, internet): fixed monthly amounts with
+  Upcoming / Due-passed / Paid status right on the transactions page — marking
+  paid records the real expense automatically, with one-tap Undo
 - Month-by-month navigation, search, and filters (type, category)
-- Dashboard: monthly totals, 6-month trend chart, category donut, budget progress
+- Dashboard: monthly totals, 6-month trend chart, category donut, budget
+  progress, recurring-bills overview
+- Dark mode (follows system, toggleable, persisted)
 - Mobile-first responsive UI (bottom nav + quick-add button)
 
 ## Scripts

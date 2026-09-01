@@ -191,7 +191,7 @@ function CategoryModal({
         msg.includes('duplicate key')
           ? 'You already have a category with this name.'
           : msg.includes('foreign key')
-            ? 'This category has transactions and cannot be deleted.'
+            ? 'This category is used by transactions or recurring bills and cannot be deleted. Rename it instead, or delete those entries first.'
             : msg,
       )
     }
@@ -207,7 +207,7 @@ function CategoryModal({
       const msg = err instanceof Error ? err.message : 'Could not delete.'
       setError(
         msg.includes('foreign key')
-          ? 'This category has transactions and cannot be deleted. (Rename it instead, or delete its transactions first.)'
+          ? 'This category is used by transactions or recurring bills and cannot be deleted. Rename it instead, or delete those entries first.'
           : msg,
       )
     }
