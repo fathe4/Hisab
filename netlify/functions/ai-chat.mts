@@ -4,7 +4,7 @@
 //
 // Env vars:
 //   GROQ_API_KEY   required — from https://console.groq.com/keys
-//   GROQ_MODEL     optional — default "llama-3.3-70b-versatile"
+//   GROQ_MODEL     optional — tried first, then the fallbacks below
 //   GROQ_BASE_URL  optional — OpenAI-compatible base URL, default Groq's
 
 interface CategoryBrief {
@@ -23,9 +23,21 @@ interface AiTransaction {
   suggested_category: string | null
 }
 
-const DEFAULT_MODEL = 'llama-3.3-70b-versatile'
+// Groq rotates model ids (e.g. llama-3.3-70b-versatile left the free tier in
+// Aug 2026), so requests try each candidate until one works. Override the
+// front of the chain with GROQ_MODEL; keep this list current with
+// https://console.groq.com/docs/models.
+const MODEL_CANDIDATES = [
+  process.env.GROQ_MODEL,
+  'openai/gpt-oss-20b', // fastest + cheapest — plenty for parsing
+  'openai/gpt-oss-120b',
+  'qwen/qwen3.6-27b',
+].filter((m): m is string => Boolean(m))
+
 const DEFAULT_BASE_URL = 'https://api.groq.com/openai/v1'
 const MAX_MESSAGE_CHARS = 500
+const PER_TRY_TIMEOUT_MS = 8_000 // Netlify free functions cap at 10s total
+const RETRY_DEADLINE_MS = 6_000 // skip remaining models if the first hung
 
 export default async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
@@ -85,48 +97,71 @@ export default async (req: Request): Promise<Response> => {
   ].join('\n')
 
   try {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 15_000)
+    const startedAt = Date.now()
+    let lastStatus = 0
 
-    const groqRes = await fetch(
-      `${process.env.GROQ_BASE_URL ?? DEFAULT_BASE_URL}/chat/completions`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey}`,
+    for (const model of MODEL_CANDIDATES) {
+      if (Date.now() - startedAt > RETRY_DEADLINE_MS && lastStatus !== 0) break
+
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), PER_TRY_TIMEOUT_MS)
+
+      const groqRes = await fetch(
+        `${process.env.GROQ_BASE_URL ?? DEFAULT_BASE_URL}/chat/completions`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model,
+            temperature: 0.2,
+            max_tokens: 400,
+            response_format: { type: 'json_object' },
+            messages: [
+              { role: 'system', content: system },
+              { role: 'user', content: message },
+            ],
+          }),
         },
-        signal: controller.signal,
-        body: JSON.stringify({
-          model: process.env.GROQ_MODEL ?? DEFAULT_MODEL,
-          temperature: 0.2,
-          max_tokens: 400,
-          response_format: { type: 'json_object' },
-          messages: [
-            { role: 'system', content: system },
-            { role: 'user', content: message },
-          ],
-        }),
-      },
-    )
-    clearTimeout(timer)
+      )
+      clearTimeout(timer)
 
-    if (!groqRes.ok) {
+      if (groqRes.ok) {
+        const groqBody = (await groqRes.json()) as {
+          choices?: { message?: { content?: string } }[]
+        }
+        const content = groqBody.choices?.[0]?.message?.content ?? ''
+        const parsed = JSON.parse(content) as { reply?: unknown; transaction?: unknown }
+
+        return json({
+          reply: typeof parsed.reply === 'string' ? parsed.reply : '',
+          transaction: sanitizeTransaction(parsed.transaction, categories),
+        })
+      }
+
+      lastStatus = groqRes.status
       const detail = await groqRes.text().catch(() => '')
-      console.error(`Groq API error ${groqRes.status}: ${detail.slice(0, 300)}`)
-      return json({ error: 'The AI service failed. Try again in a moment.' }, 502)
+      console.error(`Groq API error ${groqRes.status} (model ${model}): ${detail.slice(0, 300)}`)
+
+      // A bad key fails the same way for every model — stop early with a clear hint.
+      if (groqRes.status === 401 || groqRes.status === 403) {
+        return json(
+          { error: 'GROQ_API_KEY was rejected — check the key in Netlify → Site settings → Environment variables.' },
+          502,
+        )
+      }
+      // 404/400/… — likely a decommissioned or unsupported model: try the next one.
     }
 
-    const groqBody = (await groqRes.json()) as {
-      choices?: { message?: { content?: string } }[]
-    }
-    const content = groqBody.choices?.[0]?.message?.content ?? ''
-    const parsed = JSON.parse(content) as { reply?: unknown; transaction?: unknown }
-
-    return json({
-      reply: typeof parsed.reply === 'string' ? parsed.reply : '',
-      transaction: sanitizeTransaction(parsed.transaction, categories),
-    })
+    return json(
+      {
+        error: `No Groq model responded (last status ${lastStatus}). Set GROQ_MODEL to a current model from console.groq.com/docs/models.`,
+      },
+      502,
+    )
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
       return json({ error: 'The AI took too long to answer. Try again.' }, 504)

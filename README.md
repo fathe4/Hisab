@@ -48,7 +48,8 @@ to call Groq without exposing your API key:
    already sets the build (`npm run build` → `dist`).
 2. **Site settings → Environment variables** → add `GROQ_API_KEY`
    (free key from [console.groq.com/keys](https://console.groq.com/keys)).
-   Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`).
+   Optional: `GROQ_MODEL` (defaults to `openai/gpt-oss-20b`, with automatic
+   fallbacks — Groq rotates model ids, so outdated ones are skipped).
 3. Deploy. The chat works at `/.netlify/functions/ai-chat`.
 
 Run it locally with real functions (plain `npm run dev` has no functions —
